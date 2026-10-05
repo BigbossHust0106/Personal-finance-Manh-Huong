@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Tài chính gia đình</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#2f6f5e"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f7f7f5;--card:#fff;--text:#1d1d1b;--muted:#77756f;--line:#e6e4de;--accent:#2f6f5e;--soft:#e8f1ee;--pos:#1f8a5b;--neg:#c4412f;--bt:#fff}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#1f1f1d;--text:#f1f0ec;--muted:#9a978f;--line:#33322f;--accent:#6fbfa8;--soft:#243530;--pos:#52c48f;--neg:#ee7b69;--bt:#10201a}}
@@ -66,6 +69,7 @@ td small{display:block;color:var(--muted);font-size:11px}
 .fabw{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:8}.fabw[hidden],.fabm[hidden]{display:none!important}.ro .fabw{display:none!important}
 .fab{width:58px;height:58px;border-radius:50%;border:0;background:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:transform .15s}.fab:hover{transform:scale(1.07)}.fab:active{transform:scale(.95)}
 .fabm{position:absolute;right:0;bottom:70px;min-width:250px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:6px}.fabm button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:10px;padding:11px 12px;font:inherit;font-size:15px;color:var(--text);cursor:pointer}.fabm button:hover{background:var(--soft)}.fabm i{width:10px;height:10px;border-radius:50%;flex:none}
+.ro [data-a="add"],.ro [data-a="edit"],.ro [data-a="del"],.ro [data-a="cadd"],.ro [data-a="sadd"],.ro [data-a="cedit"],.ro [data-a="sedit"],.ro [data-a="cdel"],.ro [data-a="sdel"],.ro [data-a="cres"],.ro input[data-a="tv"],.ro input[data-a="tr"],.ro .x{display:none}
 </style>
 </head>
 <body>
@@ -136,7 +140,7 @@ function migrate(o){var n=blank(),t=today(),at=nowISO(),N="Dữ liệu cũ (chư
  (o.goals||[]).forEach(function(g){var id=uid();n.goals.push({id:id,name:g.name,target:g.amt||0,tdate:g.date||"",plan:0,note:""});if(g.saved>0)n.contrib.push({id:uid(),date:t,createdAt:at,goal:id,src:"",amt:g.saved,note:"Số dư chuyển từ dữ liệu cũ"})});
  return n}
 function load(j){try{var o=JSON.parse(j);D=o&&o.v==2?Object.assign(blank(),o):migrate(o||{})}catch(e){D=blank()}}
-function save(){var j=JSON.stringify(D);if(ref)ref.set({json:j}).catch(function(){$("#sync").textContent="Không lưu được, thử lại sau."});else{try{localStorage.setItem("fin",j)}catch(e){}}render()}
+function save(){if(RO){render();return}SB.from("finance_data").update({data:D,updated_by:USER.id,client:CID,updated_at:new Date().toISOString()}).eq("household_id",HID).then(function(r){if(r.error)$("#sync").textContent="Không lưu được: "+r.error.message});render()}
 
 /* ---------- tính toán từ giao dịch ---------- */
 function calc(list){var L=list.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:(a.at||"")<(b.at||"")?-1:1}),P={},sells=[],err=null;
@@ -329,11 +333,26 @@ document.addEventListener("click",function(e){if(!e.target.closest("#fab"))$("#f
 $("#mc").onclick=closeF;
 $("#ms").onclick=function(){if(!FM)return;var d=FM.save;if(!d){closeF();return}var err=d(FM.v);if(err){$("#me").textContent=err;return}closeF();save()};
 
-/* ---------- khởi động ---------- */
-D=blank();render();$("#sync").textContent="Dữ liệu chung của hai vợ chồng, lưu tự động.";
-(async function(){try{dl=window.claude&&await claude.use("downloads")}catch(e){}
- try{var db=window.claude&&await claude.use("db");if(db){ref=db.doc("fin/state");ref.onSnapshot(function(s){if(s.exists)load(s.data().json);else{D=blank()}if(!FM)render()},function(){});return}}catch(e){}
- try{var j=localStorage.getItem("fin");if(j){load(j);render()}}catch(e){}$("#sync").textContent="Chế độ cục bộ: dữ liệu chỉ lưu trên trình duyệt này."})();
+/* ---------- khởi động (Supabase) ---------- */
+var CFG=window.APP_CONFIG||{url:"",key:""},SB,USER,HID,ROLE,RO=false,CID=uid();
+dl={save:function(o){return new Promise(function(res,rej){try{var u=URL.createObjectURL(new Blob([o.data],{type:/\.json$/.test(o.filename)?"application/json":"text/csv;charset=utf-8"})),a=document.createElement("a");a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();a.remove();res()}catch(e){rej(e)}})}};
+function authUI(m){$("#nav").innerHTML="";$("#fb").innerHTML="";$("#main").innerHTML='<div class="card" style="max-width:360px;margin:20px auto"><h2>Đăng nhập</h2><label class="fl">Email<input id="ae" type="email" autocomplete="username"></label><label class="fl">Mật khẩu (tối thiểu 6 ký tự)<input id="ap" type="password" autocomplete="current-password"></label><div class="neg" style="font-size:13px;margin-top:8px">'+esc(m||"")+'</div><div class="mb"><button class="btn g" data-a="signup">Tạo tài khoản</button><button class="btn" data-a="signin">Đăng nhập</button></div></div>'}
+function fMembers(){form("Thêm thành viên",[{k:"em",l:"Email (người đó phải tạo tài khoản trên trang này trước)",t:"text"},{k:"role",l:"Quyền",t:"sel",o:[["editor","Được chỉnh sửa"],["viewer","Chỉ xem"],["owner","Chủ (toàn quyền)"]]}],{em:"",role:"editor"},function(v){if(!/.+@.+/.test(v.em))return"Email không hợp lệ";SB.rpc("add_member_by_email",{p_household:HID,p_email:v.em.trim(),p_role:v.role}).then(function(r){alert(r.error?"Không thêm được: "+r.error.message:"Đã thêm "+v.em)})})}
+function start(){SB.auth.getSession().then(function(r){USER=r.data.session&&r.data.session.user;if(!USER)return authUI();
+ SB.from("household_members").select("household_id,role").eq("user_id",USER.id).limit(1).then(function(m){var h=m.data&&m.data[0];
+  if(!h){$("#sync").innerHTML=esc(USER.email)+' · <a href="#" data-a="signout">Đăng xuất</a>';$("#main").innerHTML='<div class="card"><h2>Chưa thuộc hộ gia đình nào</h2><p>Nếu vợ/chồng đã có hộ, hãy nhờ họ thêm email <b>'+esc(USER.email)+'</b> vào mục Thành viên. Hoặc tạo hộ mới:</p><button class="btn" data-a="mkhh">Tạo hộ gia đình mới</button></div>';return}
+  HID=h.household_id;ROLE=h.role;RO=ROLE=="viewer";document.body.classList.toggle("ro",RO);
+  SB.from("finance_data").select("data").eq("household_id",HID).single().then(function(r){if(r.data&&r.data.data&&r.data.data.v==2)load(JSON.stringify(r.data.data));else D=blank();render();
+   $("#sync").innerHTML=esc(USER.email)+" · quyền: "+({owner:"chủ",editor:"chỉnh sửa",viewer:"chỉ xem"})[ROLE]+' · <a href="#" data-a="signout">Đăng xuất</a>'+(ROLE=="owner"?' · <a href="#" data-a="members">Thành viên</a>':"");
+   SB.channel("fd").on("postgres_changes",{event:"UPDATE",schema:"public",table:"finance_data",filter:"household_id=eq."+HID},function(p){if(p.new.client!=CID&&!FM&&p.new.data&&p.new.data.v==2){load(JSON.stringify(p.new.data));render()}}).subscribe()})})})}
+document.addEventListener("click",function(e){var b=e.target.closest("[data-a]");if(!b)return;var a=b.dataset.a;
+ if(a=="signin"||a=="signup"){var em=$("#ae").value.trim(),pw=$("#ap").value;SB.auth[a=="signin"?"signInWithPassword":"signUp"]({email:em,password:pw}).then(function(r){if(r.error)return authUI(r.error.message);if(a=="signup"&&!r.data.session)return authUI("Đã gửi email xác nhận. Hãy xác nhận rồi đăng nhập.");start()})}
+ else if(a=="signout"){e.preventDefault();SB.auth.signOut().then(function(){location.reload()})}
+ else if(a=="members"){e.preventDefault();fMembers()}
+ else if(a=="mkhh")SB.rpc("create_household",{p_name:"Gia đình"}).then(function(r){if(r.error)alert(r.error.message);else start()})});
+D=blank();
+if(!CFG.url||!CFG.key||/^DÁN/.test(CFG.url)){$("#main").innerHTML='<div class="card"><h2>Chưa cấu hình</h2><p>Mở file public/config.js, điền Project URL và anon public key của Supabase (xem HUONG-DAN.md).</p></div>'}
+else{SB=supabase.createClient(CFG.url,CFG.key);start();if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){})}
 </script>
 </body>
 </html>
