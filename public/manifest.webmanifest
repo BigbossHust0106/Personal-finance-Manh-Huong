@@ -1,1 +1,22 @@
-{"name":"Tài chính gia đình","short_name":"Tài chính","start_url":"./","display":"standalone","background_color":"#161615","theme_color":"#2f6f5e","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png"}]}
+{
+  "name": "Tài chính gia đình",
+  "short_name": "Tài chính",
+  "description": "Quản lý thu chi, đầu tư, mục tiêu và bán hàng cho gia đình",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbf8f4",
+  "theme_color": "#fbf8f4",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Bán hàng", "short_name": "Bán hàng", "url": "./?go=pos", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Thêm chi tiêu", "short_name": "Chi tiêu", "url": "./?go=exp", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Thêm thu nhập", "short_name": "Thu nhập", "url": "./?go=inc", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}
