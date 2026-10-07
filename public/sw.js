@@ -3,7 +3,7 @@
      → mỗi lần upload index.html mới, người dùng có mạng luôn nhận bản mới ngay.
    - Thư viện CDN và font: dùng bản đã lưu cho nhanh, đồng thời tải bản mới ở nền.
    - Dữ liệu Supabase KHÔNG đi qua cache (luôn lấy trực tiếp). */
-var V = "tc-0.0.9";
+var V = "tc-0.1.0";
 var SHELL = ["./", "index.html", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", function (e) {
@@ -27,6 +27,7 @@ function put(req, res) {
 self.addEventListener("fetch", function (e) {
   var r = e.request, u = new URL(r.url);
   if (r.method !== "GET") return;
+  if (u.pathname.indexOf("/api/") === 0) return; // giá cổ phiếu: luôn lấy trực tiếp, không cache
 
   if (u.origin === location.origin) {
     e.respondWith(
