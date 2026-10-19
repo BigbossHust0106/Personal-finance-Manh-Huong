@@ -1,5 +1,7 @@
 /* Lịch sử đầu tư, tuỳ chọn tài sản và PIN. Cần supabase-update-0.3.0.sql. */
 var FIN_REV = 0, SAVE_BUSY = false, HISTORY = null, PIN_ENABLED = false;
+// Chỉ nhớ trong bộ nhớ của trang, không giữ qua reload/tab mới.
+var PIN_UNLOCKED_USER = null;
 var UPDATE_SQL = 'Cần cập nhật database: chạy file supabase-update-0.3.0.sql trong Supabase › SQL Editor rồi tải lại trang.';
 
 function featureError(r) {
@@ -156,6 +158,7 @@ function pinInput(name, label) {
 }
 function pinValue(name) { var input = document.querySelector('[data-pin="' + name + '"]'); return input ? input.value : ''; }
 function pinGate() {
+  PIN_UNLOCKED_USER = null;
   if (CHN) { SB.removeChannel(CHN); CHN = null; }
   HID = null; D = blank(); HISTORY = null; PENDING = false;
   if (FM) closeF(); blankUI(); $('#acct').innerHTML = ''; $('#sync').textContent = '';
@@ -166,7 +169,7 @@ async function checkPinAccess() {
   var r = await SB.rpc('pin_status');
   if (r.error) { errUI(featureError(r)); return false; }
   PIN_ENABLED = !!r.data.enabled;
-  if (!r.data.unlocked) { pinGate(); return false; }
+  if (!r.data.unlocked || PIN_ENABLED && PIN_UNLOCKED_USER !== USER.id) { pinGate(); return false; }
   return true;
 }
 async function fPinSettings() {
@@ -187,8 +190,9 @@ async function fPinSettings() {
     if (result.error) return featureError(result);
     if (!result.data.ok) return result.data.error;
     PIN_ENABLED = next !== null;
+    PIN_UNLOCKED_USER = PIN_ENABLED ? USER.id : null;
     toast(PIN_ENABLED ? 'Đã bật PIN cho tài khoản của bạn' : 'Đã tắt PIN cho tài khoản của bạn');
-  }, 'PIN riêng cho từng tài khoản, áp dụng cho mỗi phiên đăng nhập mới trên mọi thiết bị. PIN được băm ở server. Nhập sai 5 lần sẽ tạm khoá 5 phút. Đây là khoá bổ sung, không phải xác thực hai yếu tố (2FA).');
+  }, 'PIN riêng cho từng tài khoản, được yêu cầu mỗi lần mở hoặc tải lại trang, kể cả khi vẫn còn đăng nhập. PIN được băm ở server. Nhập sai 5 lần sẽ tạm khoá 5 phút. Đây là khoá bổ sung, không phải xác thực hai yếu tố (2FA).');
   FM.persist = false;
 }
 
@@ -208,10 +212,15 @@ document.addEventListener('click', async function(e) {
       b.disabled = true;
       var r = await SB.rpc('pin_unlock',{p_pin:pin});
       if (r.error || !r.data.ok) { $('#pin-error').textContent = r.error ? featureError(r) : r.data.error; return; }
+      PIN_UNLOCKED_USER = USER.id;
       await start();
     }
   } catch(err) { toast(err.message || 'Không kết nối được. Hãy thử lại.',true); }
   finally { b.disabled = false; }
+});
+// Back/Forward có thể khôi phục cả bộ nhớ của trang từ bfcache.
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted && SB) { PIN_UNLOCKED_USER = null; start(); }
 });
 document.addEventListener('keydown',function(e) {
   if (e.key === 'Enter' && e.target.matches('[data-pin="unlock"]')) {

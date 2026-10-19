@@ -19,7 +19,7 @@ function fakeSupabase() {
     {id:'c3',owner:'Chung',date:'2025-01-01',amt:3000}
   ],goals:[],contrib:[],prices:[],invTarget:{value:0,ret:0}};
   const user={id:'owner',email:'owner@example.test',user_metadata:JSON.parse(localStorage.getItem('test_metadata')||'{"name":"Chồng"}')};
-  const state=window.TEST_STATE={user,data,revision:0,role:'owner',enabled:false,unlocked:true,failSave:false,rows:[
+  const state=window.TEST_STATE={user,data,revision:0,role:'owner',enabled:localStorage.getItem('test_pin_enabled')==='1',unlocked:true,failSave:false,rows:[
     {id:1,asset_id:'fpt',household_id:'home',actor_name:'Vợ',actor_email:'wife@example.test',occurred_at:'2025-01-01T00:00:00Z',action:'change',before_data:{asset:clone(asset),trades:[]},after_data:snapshot}
   ],rpcCalls:[]};
   function builder(table) {
@@ -57,7 +57,7 @@ function fakeSupabase() {
       }
       if(name==='pin_configure'){
         if(state.enabled&&args.p_current_pin!=='0123')return {data:{ok:false,error:'PIN hiện tại không đúng'}};
-        state.enabled=args.p_new_pin!==null;return {data:{ok:true}};
+        state.enabled=args.p_new_pin!==null;localStorage.setItem('test_pin_enabled',state.enabled?'1':'0');return {data:{ok:true}};
       }
       if(name==='archived_investments')return {data:[]};
       if(name==='restore_investment'){
@@ -163,6 +163,21 @@ test('finance interface with isolated Supabase fixtures',async t=>{
       await page.click('#ms');assert.match(await page.locator('#me').innerText(),/không khớp/);
       await page.fill('[data-pin="confirm"]','0123');await page.click('#ms');
       await page.waitForFunction(()=>TEST_STATE.enabled);
+      // Server vẫn nhớ phiên đã mở; reload phải yêu cầu PIN ở trang mới.
+      await page.reload();
+      await page.waitForSelector('[data-pin="unlock"]');
+      assert.equal(await page.evaluate(()=>TEST_STATE.unlocked),true);
+      assert.equal(await page.locator('#nav button').count(),0);
+      await page.fill('[data-pin="unlock"]','0123');await page.click('[data-a="pinunlock"]');
+      await page.waitForSelector('[data-a="t"][data-k="dt"]');
+      // Điều hướng trong trang không khoá lại.
+      await page.click('[data-a="t"][data-k="mt"]');
+      assert.equal(await page.locator('[data-pin="unlock"]').count(),0);
+      // bfcache giữ biến JS, nên sự kiện pageshow persisted phải khoá lại.
+      await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+      await page.waitForSelector('[data-pin="unlock"]');
+      await page.fill('[data-pin="unlock"]','0123');await page.click('[data-a="pinunlock"]');
+      await page.waitForSelector('[data-a="t"][data-k="dt"]');
       await page.evaluate(()=>{TEST_STATE.unlocked=false;start()});
       await page.waitForSelector('[data-pin="unlock"]');
       assert.equal(await page.locator('#nav button').count(),0);
@@ -178,6 +193,8 @@ test('finance interface with isolated Supabase fixtures',async t=>{
       assert.match(await page.locator('#me').innerText(),/không đúng/);
       await page.fill('[data-pin="current"]','0123');await page.click('#ms');
       await page.waitForFunction(()=>!TEST_STATE.enabled);
+      await page.reload();await page.waitForSelector('[data-a="t"][data-k="dt"]');
+      assert.equal(await page.locator('[data-pin="unlock"]').count(),0);
     });
     await t.test('viewer sees history without restore controls; mobile modal fits viewport',async()=>{
       await page.evaluate(()=>{RO=true;TEST_STATE.role='viewer';document.body.classList.add('ro');tab='dt';render()});

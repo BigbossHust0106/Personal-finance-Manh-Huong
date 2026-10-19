@@ -66,7 +66,7 @@ Bản web mới cần migration này để kiểm tra PIN và lưu phiên bản.
 ### PIN 4 số riêng từng tài khoản
 
 - Bấm ảnh đại diện > **Cài đặt PIN bảo mật**. Mặc định **Tắt**. Chọn **Bật / đổi PIN**, nhập PIN mới hai lần rồi lưu. PIN có thể bắt đầu bằng số 0.
-- Mỗi phiên đăng nhập Supabase mới (kể cả thiết bị khác) phải nhập PIN trước khi đọc/sửa dữ liệu. Tải lại trang trong cùng phiên đã mở khoá không yêu cầu nhập lại. Muốn kết thúc phiên, bấm **Đăng xuất**.
+- Khi đã bật PIN, mỗi lần mở trang, mở tab mới hoặc tải lại trang đều phải nhập PIN, kể cả khi Supabase vẫn giữ đăng nhập. Quay lại trang qua nút Back/Forward từ bộ nhớ trình duyệt cũng phải nhập lại. Trong cùng lần mở trang đã mở khoá, chuyển các mục không yêu cầu nhập lại. Muốn kết thúc phiên đăng nhập, bấm **Đăng xuất**. Bản sửa 0.3.1 chỉ cập nhật web, không cần chạy thêm SQL.
 - Đổi hoặc tắt PIN phải nhập PIN hiện tại. Đổi PIN thu hồi trạng thái mở khoá của các phiên khác. Nhập sai 5 lần sẽ khoá thử PIN trong 5 phút trên toàn tài khoản, kể cả đổi thiết bị.
 - PIN được băm bằng bcrypt trong schema riêng, không lưu PIN trong mã web, `localStorage`, dữ liệu tài chính hay metadata người dùng. Quyền truy cập dữ liệu và khôi phục được kiểm tra lại ở database. PIN là khoá bổ sung, không thay thế mật khẩu và không phải 2FA.
 - Quên PIN: quản trị viên Supabase phải xác minh chủ tài khoản qua kênh riêng, rồi dùng SQL Editor để xoá PIN và các phiên mở khoá của **đúng user ID** trong `finance_private.account_pins` và `finance_private.pin_sessions`. Đăng xuất rồi đăng nhập lại để đặt PIN mới. Không có nút bỏ qua PIN trên web.
