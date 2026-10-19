@@ -3,7 +3,7 @@
      → mỗi lần upload index.html mới, người dùng có mạng luôn nhận bản mới ngay.
    - Thư viện CDN và font: dùng bản đã lưu cho nhanh, đồng thời tải bản mới ở nền.
    - Dữ liệu Supabase KHÔNG đi qua cache (luôn lấy trực tiếp). */
-var V = "tc-0.1.0";
+var V = "tc-0.2.0";
 var SHELL = ["./", "index.html", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", function (e) {
