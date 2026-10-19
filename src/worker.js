@@ -14,6 +14,13 @@ export default {
     if (!tk) return J({ error: "Chưa đăng nhập" }, 401);
     const ur = await fetch(env.SUPABASE_URL + "/auth/v1/user", { headers: { authorization: "Bearer " + tk, apikey: env.SUPABASE_ANON_KEY } });
     if (!ur.ok) return J({ error: "Phiên đăng nhập không hợp lệ, hãy đăng nhập lại" }, 401);
+    const access = await fetch(env.SUPABASE_URL + "/rest/v1/rpc/pin_access", {
+      method: "POST",
+      headers: { authorization: "Bearer " + tk, apikey: env.SUPABASE_ANON_KEY, "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!access.ok) return J({ error: "Không kiểm tra được khoá bảo mật. Hãy cập nhật database hoặc thử lại." }, 503);
+    if (await access.json() !== true) return J({ error: "Cần mở khoá PIN trước khi lấy giá" }, 403);
 
     const syms = [...new Set((u.searchParams.get("symbols") || "").toUpperCase().split(",").map((s) => s.trim()).filter((s) => /^[A-Z0-9]{2,10}$/.test(s)))].slice(0, 40);
     if (!syms.length) return J({ error: "Thiếu mã cổ phiếu" }, 400);
