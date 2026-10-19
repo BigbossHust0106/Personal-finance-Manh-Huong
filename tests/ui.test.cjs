@@ -211,6 +211,84 @@ test('finance interface with isolated Supabase fixtures',async t=>{
       assert.equal(await page.evaluate(()=>PENDING),true);
       assert.match(await page.locator('#net').innerText(),/Thiết bị khác/);
     });
+    await t.test('all history sections show five recent rows; full modal retains every filtered record',async()=>{
+      await page.setViewportSize({width:1280,height:900});
+      await page.evaluate(()=>{
+        RO=false;document.body.classList.remove('ro');PENDING=false;SAVE_BUSY=false;TEST_STATE.failSave=false;
+        D=blank();normD();
+        D.tabPrefs[USER.id]={order:TABS.map(x=>x[0]),hidden:[]};
+        R={k:'custom',a:addD(today(),-365),b:today()};TF={t:'all',s:''};OWF='';OF={q:'',st:'',pm:'',ps:'',n:50};IF={p:'',n:100};SCP='all';
+        D.assets=[{id:'fpt',sym:'FPT',name:'FPT',type:'stock',owner:'Chồng',price:100}];
+        D.goals=[{id:'goal',name:'Tiết kiệm',target:1000000,plan:0}];
+        D.shop.products=[{id:'product',name:'Cà phê',price:100,cost:50,track:true}];
+        for(let i=0;i<12;i++){
+          const date=addD(today(),-i),at=date+'T12:00:00Z';
+          D.inc.push({id:'income'+i,name:'Thu '+i,member:'Chung',cat:D.incCats[1].id,date,createdAt:at,amt:100});
+          D.exp.push({id:'expense'+i,member:'Chung',cat:D.expCats[0].id,date,createdAt:at,amt:10});
+          D.itx.push({id:'trade'+i,asset:'fpt',type:'buy',owner:'Chồng',date,at,qty:1,price:100,fee:0,tax:0});
+          D.dep.push({id:'dep'+i,type:'in',owner:'Chồng',date,createdAt:at,amt:100});
+          D.cash.push({id:'cash'+i,owner:'Chung',date,createdAt:at,amt:100});
+          D.contrib.push({id:'contrib'+i,goal:'goal',date,createdAt:at,amt:10});
+          D.shop.orders.push({id:'order'+i,code:'DH'+i,date,at,status:'done',pst:'paid',pay:'cash',total:100,pays:[],items:[],by:'owner@example.test'});
+          D.shop.inv.push({id:'stock'+i,product:'product',type:'OPEN',date,at,qty:1,cost:50});
+          D.shop.audit.push({act:'Sửa',obj:'Mục '+i,at,who:'owner@example.test'});
+          const start=addD(today(),-i*28-5);
+          D.cyc.periods.push({start,end:addD(start,4)});
+          D.cyc.weights.push({date,kg:60+i/10});
+        }
+        D.shop.audit.reverse();
+      });
+      const sections=[
+        ['tong','',null,['box-inc','box-exp']],
+        ['dt','',null,['deposits','invest-trades']],
+        ['mt','',null,['cash-changes','box-contrib','extra-income']],
+        ['bh','ord',null,['orders']],['bh','inv',null,['inventory']],['bh','set',null,['shop-audit']],
+        ['cyc','', 'cy',['cycles']],['cyc','', 'wt',['weights']]
+      ];
+      for(const [tabName,sub,cySub,keys] of sections){
+        await page.evaluate(({tabName,sub,cySub})=>{tab=tabName;if(sub)SUB=sub;if(cySub)CSUB=cySub;render()},{tabName,sub,cySub});
+        for(const key of keys){
+          const button=page.locator('#main [data-a="historyall"][data-k="'+key+'"]');
+          assert.equal(await button.count(),1,key+' has full-history button');
+          const heading=await page.evaluate(key=>!!RECENT_HISTORIES[key].heading,key);
+          const card=button.locator('xpath=ancestor::div[contains(concat(" ",normalize-space(@class)," ")," card ")][1]');
+          assert.equal(await card.locator(heading?'table tr:not(:first-child)':'.row').count(),5,key+' preview count');
+          await button.click();
+          await page.waitForSelector('#md:not([hidden])');
+          assert.equal(await page.locator(heading?'#mf table tr:not(:first-child)':'#mf .row').count(),12,key+' full count');
+          await page.click('#ms');
+        }
+      }
+      // A short/empty list does not offer an unnecessary full-history window.
+      await page.evaluate(()=>{D.inc=D.inc.slice(0,5);D.exp=[];tab='tong';render()});
+      assert.equal(await page.locator('[data-a="historyall"][data-k="box-inc"]').count(),0);
+      assert.equal(await page.locator('[data-a="historyall"][data-k="box-exp"]').count(),0);
+      // The full view follows active filters; it does not leak other owners.
+      await page.evaluate(()=>{D.itx[0].owner='Vợ';OWF='Chồng';tab='dt';render()});
+      await page.click('[data-a="historyall"][data-k="invest-trades"]');
+      assert.equal(await page.locator('#mf .row').count(),11);
+      await page.click('#ms');
+    });
+    await t.test('per-symbol journal previews five versions and full view fetches beyond one server batch',async()=>{
+      await page.evaluate(()=>{
+        TEST_STATE.rows=Array.from({length:62},(_,i)=>({id:i+1,asset_id:'fpt',household_id:'home',actor_name:'Người '+i,occurred_at:'2025-01-01T00:00:00Z',action:'change',before_data:{asset:D.assets[0],trades:[]},after_data:{asset:D.assets[0],trades:[]}}));
+      });
+      await page.click('[data-a="ihistory"]');
+      await page.waitForSelector('.history-entry');
+      assert.equal(await page.locator('.history-entry').count(),5);
+      assert.equal(await page.locator('#mf .version-change').count(),5);
+      await page.click('[data-a="vmore"]');
+      await page.waitForFunction(()=>document.querySelectorAll('.history-entry').length===62);
+      assert.equal(await page.locator('[data-a="vmore"]').count(),0);
+      await page.click('[data-a="historyall"][data-k="symbol-trades"]');
+      assert.equal(await page.locator('#mf .version-change').count(),12);
+      await page.click('#ms');
+      await page.evaluate(()=>{TEST_STATE.rows=TEST_STATE.rows.slice(0,5)});
+      await page.click('[data-a="ihistory"]');await page.waitForSelector('.history-entry');
+      assert.equal(await page.locator('.history-entry').count(),5);
+      assert.equal(await page.locator('[data-a="vmore"]').count(),0);
+      await page.click('#ms');
+    });
     assert.deepEqual(errors,[]);
   }finally{await browser.close();await new Promise(r=>server.close(r));}
 });

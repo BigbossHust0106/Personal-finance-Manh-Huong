@@ -2,6 +2,25 @@
 var FIN_REV = 0, SAVE_BUSY = false, HISTORY = null, PIN_ENABLED = false;
 // Chỉ nhớ trong bộ nhớ của trang, không giữ qua reload/tab mới.
 var PIN_UNLOCKED_USER = null;
+var RECENT_HISTORIES = {};
+var HISTORY_PREVIEW_LIMIT = 5;
+function historyItems(key, title, items, row, heading) {
+  RECENT_HISTORIES[key] = {hid:HID, title:title, items:items, row:row, heading:heading};
+  return items.slice(0,HISTORY_PREVIEW_LIMIT).map(row).join('');
+}
+function historyMore(key) {
+  var entry = RECENT_HISTORIES[key];
+  return entry && entry.items.length > HISTORY_PREVIEW_LIMIT ? '<div class="history-actions"><button type="button" class="btn g" data-a="historyall" data-k="' + esc(key) + '">Xem tất cả (' + entry.items.length + ')</button></div>' : '';
+}
+function fAllHistory(key) {
+  var entry = RECENT_HISTORIES[key];
+  if (!entry || entry.hid !== HID) return;
+  form(entry.title + ' · Tất cả', [{k:'allhistory',t:'html',h:function() {
+    var rows = entry.items.map(entry.row).join('');
+    return '<p class="history-note">' + entry.items.length + ' bản ghi theo bộ lọc của danh sách đang xem.</p>' +
+      (entry.heading ? '<div class="tw"><table>' + entry.heading + rows + '</table></div>' : rows);
+  }}],{},null,'','Đóng');
+}
 var UPDATE_SQL = 'Cần cập nhật database: chạy file supabase-update-0.3.0.sql trong Supabase › SQL Editor rồi tải lại trang.';
 
 function featureError(r) {
@@ -92,9 +111,9 @@ function versionChanges(h) {
 }
 function historyMarkup(state) {
   return '<p class="history-note">Tất cả chủ sở hữu · toàn bộ thời gian. Mỗi lần sửa, xoá hoặc khôi phục đều được lưu riêng. Giá thị trường tự cập nhật không tạo phiên bản.</p>' +
-    '<h3>Giao dịch hiện tại</h3>' + (state.trades.length ? desc(state.trades).map(function(t) {
+    '<h3>Giao dịch hiện tại</h3>' + (state.trades.length ? historyItems('symbol-trades','Giao dịch của mã',desc(state.trades),function(t) {
       return '<div class="version-change">' + tradeSummary(t) + '</div>';
-    }).join('') : '<p>Chưa có giao dịch.</p>') + '<h3>Nhật ký và phiên bản lưu trữ</h3>' +
+    }) + historyMore('symbol-trades') : '<p>Chưa có giao dịch.</p>') + '<h3>Nhật ký và phiên bản lưu trữ</h3>' +
     (state.rows.length ? state.rows.map(function(h) {
       return '<article class="history-entry"><b>' + esc(h.actor_name) + '</b>' + (h.actor_email ? ' <span class="history-note">(' + esc(h.actor_email) + ')</span>' : '') + ' · ' + dtm(h.occurred_at) +
         '<div class="history-note">' + (h.action === 'restore' ? 'Khôi phục từ phiên bản #' + h.restored_from : h.action === 'baseline' ? 'Mốc dữ liệu trước khi bật lịch sử' : 'Cập nhật đầu tư') +
@@ -102,22 +121,26 @@ function historyMarkup(state) {
         (!RO ? '<div class="history-actions">' + (h.before_data ? '<button type="button" class="chip" data-a="vrestore" data-i="' + h.id + '" data-k="before">Khôi phục trước thay đổi</button>' : '') +
         '<button type="button" class="chip" data-a="vrestore" data-i="' + h.id + '" data-k="after">Khôi phục phiên bản này</button></div>' : '') + '</article>';
     }).join('') : '<p>Chưa có nhật ký.</p>') +
-    (state.more ? '<button type="button" class="btn g" data-a="vmore">Xem phiên bản cũ hơn</button>' : '') +
+    (state.more ? '<button type="button" class="btn g" data-a="vmore">Xem tất cả phiên bản</button>' : '') +
     '<p class="history-note">Giao dịch trước bản cập nhật chưa có thông tin người thực hiện. Khôi phục áp dụng toàn bộ giao dịch và thông tin của riêng mã này cho cả vợ, chồng và chung; giữ giá thị trường hiện tại, không thay đổi các mã khác.</p>';
 }
 async function fInvestmentHistory(assetId, more) {
   var hid = HID, state = more ? HISTORY : {hid:hid, assetId:assetId, rows:[], trades:D.itx.filter(function(t) { return t.asset === assetId; })};
   if (!state || state.hid !== hid) return;
-  var query = SB.from('investment_history').select('*').eq('household_id',hid).eq('asset_id',assetId).order('id',{ascending:false}).limit(50);
-  if (more && state.rows.length) query = query.lt('id',state.rows[state.rows.length-1].id);
-  var r;
-  try { r = await query; } catch(e) { return toast('Không tải được lịch sử: ' + e.message,true); }
-  if (hid !== HID) return;
-  if (r.error) return toast(featureError(r),true);
-  state.rows = state.rows.concat(r.data || []); state.more = r.data.length === 50;
+  var batch = more ? 50 : HISTORY_PREVIEW_LIMIT + 1;
+  do {
+    var query = SB.from('investment_history').select('*').eq('household_id',hid).eq('asset_id',assetId).order('id',{ascending:false}).limit(batch);
+    if (state.rows.length) query = query.lt('id',state.rows[state.rows.length-1].id);
+    var r;
+    try { r = await query; } catch(e) { return toast('Không tải được lịch sử: ' + e.message,true); }
+    if (hid !== HID) return;
+    if (r.error) return toast(featureError(r),true);
+    state.rows = state.rows.concat(more ? r.data || [] : (r.data || []).slice(0,HISTORY_PREVIEW_LIMIT));
+    state.more = more ? r.data.length === batch : r.data.length > HISTORY_PREVIEW_LIMIT;
+  } while (more && state.more);
   HISTORY = state;
   var a = D.assets.find(function(x) { return x.id === assetId; });
-  form('Lịch sử · ' + (a ? a.sym : 'Mã đã xoá'), [{k:'history',t:'html',h:function() { return historyMarkup(state); }}], {}, null, '', 'Đóng');
+  form((more ? 'Tất cả phiên bản · ' : 'Lịch sử · ') + (a ? a.sym : 'Mã đã xoá'), [{k:'history',t:'html',h:function() { return historyMarkup(state); }}], {}, null, '', 'Đóng');
 }
 async function fArchivedInvestments() {
   var hid = HID, r = await SB.rpc('archived_investments',{p_household:hid});
@@ -200,9 +223,10 @@ document.addEventListener('click', async function(e) {
   var b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
   var action = b.dataset.a;
   try {
-    if (action === 'ihistory' || action === 'tsf') { e.preventDefault(); await fInvestmentHistory(b.dataset.i); }
+    if (action === 'historyall') fAllHistory(b.dataset.k);
+    else if (action === 'ihistory' || action === 'tsf') { e.preventDefault(); await fInvestmentHistory(b.dataset.i); }
     else if (action === 'iarchive') await fArchivedInvestments();
-    else if (action === 'vmore' && HISTORY) await fInvestmentHistory(HISTORY.assetId,true);
+    else if (action === 'vmore' && HISTORY) { b.disabled = true; await fInvestmentHistory(HISTORY.assetId,true); }
     else if (action === 'vrestore') fRestoreInvestment(b.dataset.i,b.dataset.k);
     else if (action === 'wealthdisplay') fWealthDisplay();
     else if (action === 'pinsettings') { var menu = $('#accm'); if (menu) menu.hidden = true; await fPinSettings(); }

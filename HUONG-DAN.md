@@ -55,7 +55,7 @@ Bản web mới cần migration này để kiểm tra PIN và lưu phiên bản.
 - Bấm **Xem nội dung thay đổi**, rồi **Khôi phục trước thay đổi** hoặc **Khôi phục phiên bản này**. Xem bản xem trước và xác nhận. Chỉ chủ trang/người được chỉnh sửa được khôi phục; người chỉ xem vẫn đọc được lịch sử.
 - Khôi phục thay thế thông tin và toàn bộ giao dịch của riêng mã đó, gồm phần vợ/chồng/chung. Các mã khác, thu chi và giá thị trường hiện tại được giữ. Thao tác khôi phục tạo phiên bản mới; muốn hoàn tác, khôi phục trạng thái trước thao tác đó. Phiên bản bán quá số lượng đang có sẽ bị từ chối.
 - Chỉ thay đổi đã lưu thành công mới có nhật ký trên server. Nếu thiết bị khác vừa sửa dữ liệu, ứng dụng báo xung đột thay vì ghi đè: tải bản sao lưu thay đổi đang có trước khi tải lại trang và đối chiếu. Lưu xong các thay đổi mới khôi phục hoặc chuyển trang quản lý.
-- Nhật ký không bị giới hạn 500 dòng như nhật ký bán hàng cũ; giao diện tải mỗi lần 50 phiên bản. Xoá hẳn trang quản lý vẫn xoá toàn bộ dữ liệu và nhật ký của trang đó.
+- Nhật ký không bị giới hạn 500 dòng như nhật ký bán hàng cũ; giao diện ban đầu hiện 5 phiên bản gần nhất; bấm **Xem tất cả phiên bản** để tải đầy đủ. Xoá hẳn trang quản lý vẫn xoá toàn bộ dữ liệu và nhật ký của trang đó.
 
 ### Chọn tiền mặt hoặc tổng tài sản
 
@@ -90,3 +90,7 @@ WRANGLER_SEND_METRICS=false /tmp/finance-dev-tools/node_modules/.bin/wrangler de
 ```
 
 `CHROMIUM_PATH` có thể chỉ định binary khác `/usr/bin/chromium`. Kiểm thử giao diện dùng fixture Supabase để không truy cập tài khoản/dữ liệu thật; kiểm thử database thực thi migration, RLS, nhật ký, khôi phục, giới hạn PIN và chống ghi đè phiên bản trên PostgreSQL thật. Kiểm thử Worker giả lập các dịch vụ ngoài để kiểm tra chặn đăng nhập/PIN trước khi lấy giá.
+
+## Bản 0.3.2: danh sách lịch sử gọn hơn
+
+Các phần lịch sử thu/chi, đầu tư, nạp/rút/margin, điều chỉnh tiền mặt, đóng góp mục tiêu, đơn hàng, biến động kho, thay đổi bán hàng, chu kỳ và cân nặng chỉ hiện **5 bản ghi gần nhất**. Khi có nhiều hơn 5 bản ghi, nút **Xem tất cả** mở cửa sổ danh sách đầy đủ theo bộ lọc hiện tại. Các tổng tiền, thống kê và dữ liệu xuất vẫn dùng toàn bộ dữ liệu. Bản cập nhật này không cần chạy thêm SQL.
